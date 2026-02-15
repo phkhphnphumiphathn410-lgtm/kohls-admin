@@ -131,10 +131,9 @@ return {
 			return { remote = _K.Remote.ForceChat }
 		end,
 		run = function(context, players: { Player }, message: string)
-			for _, player in context._K.Service.Players:GetPlayers() do
+			for _, player in players do
 				context.env.remote:Fire(player, message)
 			end
-			return
 		end,
 	},
 	{
@@ -218,6 +217,8 @@ return {
 				end
 			)
 
+			_K.Remote.Incognito:Fire()
+
 			return env
 		end,
 
@@ -248,10 +249,6 @@ return {
 			local cleanup = {}
 
 			_K.Util.SafePlayerAdded(function(player: Player)
-				for hiddenPlayer, hideCharacter in env.hidden do
-					local hiddenRank = _K.Auth.getRank(hiddenPlayer.UserId)
-					env.remote:FireAll(hiddenPlayer.UserId, hiddenRank, hideCharacter)
-				end
 				cleanup[player] = player.CharacterAdded:Connect(characterAdded)
 				if player.Character then
 					characterAdded(player.Character)
@@ -264,6 +261,13 @@ return {
 				if env.hidden[player] ~= nil then
 					env.hidden[player] = nil
 					env.remote:FireAll(player.UserId)
+				end
+			end)
+
+			env.remote:Connect(function(player)
+				for hiddenPlayer, hideCharacter in env.hidden do
+					local hiddenRank = _K.Auth.getRank(hiddenPlayer.UserId)
+					env.remote:Fire(player, hiddenPlayer.UserId, hiddenRank, hideCharacter)
 				end
 			end)
 
@@ -406,7 +410,7 @@ return {
 				"_K_ReservedServers",
 				function(message)
 					local data = message.Data
-					if data then
+					if type(data) == "table" then
 						_K.Data.reservedServers[data[1]] = { unpack(data, 2) }
 						for _, player in _K.Service.Players:GetPlayers() do
 							if
@@ -540,6 +544,12 @@ return {
 		env = function(_K)
 			task.spawn(function()
 				_K.Service.Messaging:SubscribeAsync("KA_GlobalCommand", function(message)
+					if type(message.Data) == "string" then
+						message.Data = Util.Service.Http:JSONDecode(message.Data)
+					end
+					if type(message.Data) ~= "table" then
+						return
+					end
 					local from, commandString = unpack(message.Data)
 					if from and commandString then
 						_K.Process.runCommands(_K, from, commandString, true, true)

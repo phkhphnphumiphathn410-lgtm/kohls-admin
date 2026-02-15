@@ -5,7 +5,6 @@ local _K = require(script.Parent.Parent)
 local CompletionData = require(script:WaitForChild("CompletionData"))
 
 local UI = require(script.Parent:WaitForChild("UI"))
-local prefix = _K.getCommandPrefix()
 
 local validState = UI.state(nil)
 local indicatorColor = UI.compute(function()
@@ -501,8 +500,9 @@ local function invalidSuggestion(data, err, pos, text)
 	if data.argIndex == 1 then -- command
 		-- TODO: inline argument types if command
 		-- show command aliases too!
-		Tooltip.Text =
-			string.format(argumentFormat, _K.Util.String.escapeRichText(suggestion), "command", value.description)
+		local desc = value.description
+		local description = if type(value) == "table" and type(desc) == "string" then desc else "?"
+		Tooltip.Text = string.format(argumentFormat, _K.Util.String.escapeRichText(suggestion), "command", description)
 	end
 	return
 end
@@ -642,7 +642,7 @@ updateCompletion = function()
 	elseif
 		not quote
 		and data.suggestionType ~= "History"
-		and string.find(completion, `[ {_K.Util.String.escapePattern(prefix)}]`)
+		and string.find(completion, `[ {_K.Util.String.escapePattern(_K.getCommandPrefix())}]`)
 	then
 		completion = `"{completion}"`
 	end
@@ -775,18 +775,17 @@ return {
 		end
 		initialized = true
 
-		prefix = _K.getCommandPrefix()
-		Input.Value(prefix, true)
+		Input.Value(_K.getCommandPrefix(), true)
 		CommandBar.Parent = UI.TopbarFrame
 		_K.client.hotkeys.commandBar =
 			{ key = UI.state(Enum.KeyCode.Semicolon), mods = UI.state({}), callback = self.show }
 		_K.client.CommandBarState = { validState, indicatorColor }
 
+		local lastPrefix = _K.getCommandPrefix()
 		local function updatePrefix()
-			local value = _K.getCommandPrefix()
-			local oldPrefix = prefix
-			prefix = value
-			Input.Value(value .. string.sub(Input._input.Text, #oldPrefix + 1), true)
+			local prefix = _K.getCommandPrefix()
+			Input.Value(prefix .. string.sub(Input._input.Text, #lastPrefix + 1), true)
+			lastPrefix = prefix
 		end
 		_K.client.settings.prefix:Connect(updatePrefix)
 		_K.client.playerPrefix:Connect(updatePrefix)
@@ -818,7 +817,7 @@ return {
 		Input._input:GetPropertyChangedSignal("CursorPosition"):Connect(function()
 			local cursorPosition = Input._input.CursorPosition
 			if cursorPosition ~= -1 then
-				local prefixPosition = #prefix + 1
+				local prefixPosition = #_K.getCommandPrefix() + 1
 				if cursorPosition < prefixPosition then
 					Input._input.CursorPosition = prefixPosition
 					return
@@ -852,6 +851,7 @@ return {
 					return Input._input:CaptureFocus()
 				end
 
+				local prefix = _K.getCommandPrefix()
 				if Input._input.Text ~= prefix and #data.commands < 1 then
 					UI.Sound.Negative:Play()
 					return Input._input:CaptureFocus()
@@ -901,48 +901,55 @@ return {
 			return
 		end)
 
-		local isUpdating = false
-		Input._input:GetPropertyChangedSignal("Text"):Connect(function()
-			if isUpdating then
+		local updating = {}
+		local function updateInput(input: any, autocomplete: boolean?)
+			if updating[input] then
 				return
 			end
-			isUpdating = true
+			updating[input] = true
 
-			if currentCompletion and UserInputService:IsKeyDown(Enum.KeyCode.Tab) then
+			if autocomplete and currentCompletion and UserInputService:IsKeyDown(Enum.KeyCode.Tab) then
 				completeSuggestion()
-				isUpdating = false
+				updating[input] = false
 				return
 			end
 
+			local prefix = _K.getCommandPrefix()
 			local prefixLen = #prefix
-			local text = Input._input.Text
+			local text = input._input.Text
 
 			-- prepend prefix
 			if string.find(text, prefix, 1, true) ~= 1 then
-				Input._input.CursorPosition += prefixLen
+				input._input.CursorPosition += prefixLen
 				text = prefix .. text
-				Input.Value(text, true)
-				Input._input.CursorPosition += prefixLen
+				input.Value(text, true)
+				input._input.CursorPosition += prefixLen
 			end
 
 			-- trim whitespace after prefix
 			local trimmed = prefix .. _K.Util.String.trimStart(string.sub(text, prefixLen + 1))
-			if trimmed ~= Input._input.Text then
+			if trimmed ~= input._input.Text then
 				text = trimmed
-				Input.Value(trimmed, true)
+				input.Value(trimmed, true)
 			end
 
 			if text ~= prefix then
 				-- remove duplicate starting prefix
 				if string.find(text, prefix, prefixLen + 1, true) == prefixLen + 1 then
 					text = string.sub(text, prefixLen + 1)
-					Input.Value(text, true)
+					input.Value(text, true)
 				else
-					Input.DisplayText(_K.Util.String.escapeRichText(text), true)
+					input.DisplayText(_K.Util.String.escapeRichText(text), true)
 				end
 			end
 
-			isUpdating = false
+			updating[input] = false
+		end
+
+		_K.client.updateCommandInput = updateInput
+
+		Input._input:GetPropertyChangedSignal("Text"):Connect(function()
+			updateInput(Input, true)
 		end)
 	end,
 	show = function()

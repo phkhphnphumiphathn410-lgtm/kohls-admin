@@ -45,6 +45,66 @@ return {
 		end,
 	},
 	{
+		name = "cmdbar2",
+		aliases = { "cmdbarfloating", "cmdbarwindow" },
+		description = "Shows a floating command bar window.",
+		optionalPrefix = true,
+		envClient = function(_K)
+			local UI = _K.UI
+			local env = {}
+
+			local input = UI.new "Input" {
+				ClearTextButton = true,
+				Fill = true,
+				FontFace = UI.Theme.FontMono,
+				FontSize = UI.Theme.FontSize,
+				Placeholder = ";command",
+				Value = "",
+			}
+
+			input._input:GetPropertyChangedSignal("Text"):Connect(function()
+				_K.client.updateCommandInput(input)
+			end)
+
+			local function executeCommand()
+				local trimmed = _K.Util.String.trimEnd(input._input.Text)
+				task.spawn(_K.Process.runCommands, _K, _K.LocalPlayer.UserId, trimmed)
+			end
+
+			input._input.FocusLost:Connect(function(enterPressed)
+				if enterPressed then
+					executeCommand()
+				end
+			end)
+
+			env.window = UI.new "Window" {
+				Parent = UI.LayerTopInset,
+				Icon = "rbxassetid://71961243872230",
+				Name = "Cmdbar2",
+				Title = "Command Bar",
+				AutomaticSize = Enum.AutomaticSize.Y,
+				Size = UDim2.fromOffset(420, 0),
+
+				UI.new "UIListLayout" {
+					SortOrder = Enum.SortOrder.LayoutOrder,
+					Padding = UI.Theme.Padding,
+				},
+
+				input,
+				UI.new "Button" {
+					Label = "Run Command",
+					Activated = executeCommand,
+				},
+			}
+
+			return env
+		end,
+
+		runClient = function(context)
+			context.env.window._instance.Visible = not context.env.window._instance.Visible
+		end,
+	},
+	{
 		name = "about",
 		aliases = { "credit", "credits", "info" },
 		description = "Shows the about tab in a separate window.",
@@ -582,7 +642,7 @@ return {
 
 				task.spawn(function()
 					local ok, model = _K.Util.Retry(function()
-						return _K.Service.Players:CreateHumanoidModelFromUserId(_K.LocalPlayer.UserId)
+						return _K.Service.Players:CreateHumanoidModelFromUserId(math.max(1, _K.LocalPlayer.UserId))
 					end)
 					if not ok then
 						model = _K.Flux.new "Model" {
@@ -1038,6 +1098,31 @@ return {
 		end,
 	},
 	{
+		name = "gameid",
+		aliases = {},
+		description = "Displays the current GameId.",
+		runClient = function(context, volume)
+			context._K.Notify({ From = "GameId", Text = tostring(game.GameId), Selectable = true })
+		end,
+	},
+	{
+		name = "jobid",
+		aliases = {},
+		description = "Displays the current JobId.",
+		runClient = function(context, volume)
+			context._K.Notify({ From = "JobId", Text = tostring(game.JobId), Selectable = true })
+		end,
+	},
+	{
+		name = "placeid",
+		aliases = {},
+		description = "Displays the current PlaceId.",
+		runClient = function(context, volume)
+			context._K.Notify({ From = "PlaceId", Text = tostring(game.PlaceId), Selectable = true })
+		end,
+	},
+
+	{
 		name = "showfps",
 		aliases = { "getfps", "checkfps", "playerfps" },
 		description = "Displays the frames per second of a player.",
@@ -1115,6 +1200,7 @@ return {
 	},
 	{
 		name = "rejoin",
+		aliases = { "rj" },
 		description = "Rejoins the server.",
 
 		run = function(context)

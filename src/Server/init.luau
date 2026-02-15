@@ -522,6 +522,18 @@ return function(_K)
 				return
 			end
 
+			if changes.freeAdmin then
+				if type(changes.freeAdmin) ~= "table" then
+					changes.freeAdmin = nil
+				end
+				for _, roleId in changes.freeAdmin do
+					if type(roleId) ~= "string" or not _K.Auth.hasRole(player.UserId, roleId) then
+						changes.freeAdmin = nil
+						break
+					end
+				end
+			end
+
 			local changeStrings = {}
 			for key, value in changes do
 				if _K.Data.savedSettings[key] == nil then
@@ -581,11 +593,14 @@ return function(_K)
 			}
 
 			_K.Data.targetLimits[player.UserId] = 0
-			if _K.Auth.targetUserArgument(fauxArg, userId, userId) then
+			if type(reason) == "string" and _K.Auth.targetUserArgument(fauxArg, userId, userId) then
 				if
 					not _K.Auth.hasPermission(player.UserId, "banasync") or not _K.Auth.hasRestrictedRole(player.UserId)
 				then
 					duration = 0
+				end
+				if #reason > 1024 then
+					reason = string.sub(reason, 1, 1024)
 				end
 				_K.log(`{_K.getCommandPrefix()}ban {userId} {duration} {reason}`, "COMMAND", player.UserId)
 				_K.Auth.banUsers({ userId }, reason, duration, player.UserId)
@@ -620,7 +635,6 @@ return function(_K)
 			end
 
 			if action == "PASTE" and selected then
-				print(data, selected)
 				for _, copy: Instance in data do
 					local wasArchivable = copy.Archivable
 					copy.Archivable = true
@@ -670,6 +684,10 @@ return function(_K)
 				initialJoin[player.UserId] = initialJoinTime
 			end
 			player:SetAttribute("_KInitialJoin", initialJoinTime)
+
+			if _K.Service.Run:IsStudio() then
+				_K.Auth.userRoleAdd(player.UserId, "creator")
+			end
 
 			if (_K.Data.settings.welcomeBadgeId or 0) > 0 then
 				task.spawn(awardBadge, player.UserId, _K.Data.settings.welcomeBadgeId)
